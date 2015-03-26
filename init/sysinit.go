@@ -132,6 +132,23 @@ func runContainersFrom(startFrom string, cfg *config.Config, containerConfigs []
 				log.Errorf("Failed to run %v: %v", containerConfig.Id, container.Err)
 			}
 
+			if cfg.Debug {
+				client, err := docker.NewSystemClient()
+				if err != nil {
+					return err
+				}
+
+				log.Infof("Logging output from %s", container.Name)
+				client.Logs(dockerClient.LogsOptions{
+					Container:    container.Name,
+					Stdout:       true,
+					Stderr:       true,
+					Follow:       false,
+					OutputStream: os.Stdout,
+					ErrorStream:  os.Stderr,
+				})
+			}
+
 			if containerConfig.ReloadConfig {
 				log.Info("Reloading configuration")
 				err := cfg.Reload()
