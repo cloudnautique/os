@@ -1,2 +1,3 @@
 FROM base
-CMD ["netconf"]
+COPY scripts/dockerimages/scripts/network_debug.sh /usr/bin/
+CMD ["/usr/bin/network_debug.sh"]
