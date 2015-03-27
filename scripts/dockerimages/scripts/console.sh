@@ -53,6 +53,7 @@ if [ -x /var/lib/rancher/conf/cloud-config-script ]; then
 fi
 
 setup_ssh
+setup_common_etc
 
 VERSION="$(rancherctl -v | awk '{print $NF}')"
 cat > /etc/lsb-release << EOF

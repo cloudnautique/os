@@ -17,7 +17,9 @@ package cloudinit
 
 import (
 	"flag"
+	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -56,6 +58,13 @@ var (
 	sshKeyName string
 	flags      *flag.FlagSet
 )
+
+type HttpNot200Error string
+
+func (path HttpNot200Error) Error() string {
+	//trying not to bring in fmt
+	return strings.Join([]string{"Bad request for path: ", string(path)}, "")
+}
 
 func init() {
 	flags = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
@@ -266,10 +275,80 @@ func getDatasources(cfg *rancherConfig.Config) []datasource.Datasource {
 			if len(parts) == 2 {
 				dss = append(dss, configdrive.NewDatasource(parts[1]))
 			}
+		case "gce":
+			// Need to hand roll this....
+			if network {
+				dss = append(dss, getGceUserdataFile()...)
+			}
 		}
 	}
 
 	return dss
+}
+
+func getGceUserdataFile() []datasource.Datasource {
+	var dss []datasource.Datasource
+	types := []string{"project", "instance"}
+
+	for idx := range types {
+		dataSourceType := types[idx]
+		filename, err := makeGceUserDataRequest(dataSourceType)
+		if err != nil {
+			log.Errorf("Could not retrieve GCE user-data. Received: %s", err)
+			continue
+		}
+
+		dss = append(dss, file.NewDatasource(filename))
+
+	}
+	return dss
+}
+
+func gceGetRequestToFile(path string, filename string) error {
+	url := "http://169.254.169.254/computeMetadata/v1/" + path
+
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Metadata-Flavor", "Google")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// not found..
+	if resp.StatusCode != 200 {
+		log.Debugf("Received Status Code: %d for Url %s", resp.StatusCode, url)
+		return HttpNot200Error(path)
+	}
+
+	//create the file when we know we have a
+	cloudOutFile, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer cloudOutFile.Close()
+
+	io.Copy(cloudOutFile, resp.Body)
+
+	return nil
+}
+
+func makeGceUserDataRequest(dataSourceType string) (string, error) {
+	userDataPath := dataSourceType + "/attributes/user-data"
+	filename := "/var/lib/rancher/conf/cloud_init_gce_userdata_" + dataSourceType + ".yml"
+
+	err := gceGetRequestToFile(userDataPath, filename)
+	if err != nil {
+		return "", err
+	}
+
+	return filename, nil
 }
 
 // selectDatasource attempts to choose a valid Datasource to use based on its
