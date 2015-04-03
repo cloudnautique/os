@@ -273,7 +273,7 @@ func getDatasources(cfg *rancherConfig.Config) []datasource.Datasource {
 					log.Errorf("Could not retrieve GCE CloudConfig %s", err)
 					continue
 				}
-				dss = append(dss, file.NewDataSource(gceCloudConfigFile))
+				dss = append(dss, file.NewDatasource(gceCloudConfigFile))
 			}
 		}
 	}
